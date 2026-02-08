@@ -1,7 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{mint_to, transfer, Mint, MintTo, Token, TokenAccount, Transfer},
+    token_interface::{
+        mint_to, transfer_checked, Mint, MintTo, TokenAccount, TokenInterface, TransferChecked,
+    },
 };
 use constant_product_curve::ConstantProduct;
 
@@ -11,8 +13,10 @@ use crate::{error::AmmError, state::Config};
 pub struct Deposit<'info> {
     #[account(mut)]
     pub user: Signer<'info>,
-    pub mint_x: Account<'info, Mint>,
-    pub mint_y: Account<'info, Mint>,
+    #[account(mint::token_program = token_program)]
+    pub mint_x: Box<InterfaceAccount<'info, Mint>>,
+    #[account(mint::token_program = token_program)]
+    pub mint_y: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         has_one = mint_x,
         has_one = mint_y,
@@ -25,39 +29,44 @@ pub struct Deposit<'info> {
         seeds = [b"lp", config.key().as_ref()],
         bump = config.lp_bump,
     )]
-    pub mint_lp: Account<'info, Mint>,
+    pub mint_lp: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = config,
+        associated_token::token_program = token_program
     )]
-    pub vault_x: Account<'info, TokenAccount>,
+    pub vault_x: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = config,
+        associated_token::token_program = token_program
     )]
-    pub vault_y: Account<'info, TokenAccount>,
+    pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = mint_x,
         associated_token::authority = user,
+        associated_token::token_program = token_program
     )]
-    pub user_x: Account<'info, TokenAccount>,
+    pub user_x: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         mut,
         associated_token::mint = mint_y,
         associated_token::authority = user,
+        associated_token::token_program = token_program
     )]
-    pub user_y: Account<'info, TokenAccount>,
+    pub user_y: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
         init_if_needed,
         payer = user,
         associated_token::mint = mint_lp,
         associated_token::authority = user,
+        mint::token_program = token_program
     )]
-    pub user_lp: Account<'info, TokenAccount>,
-    pub token_program: Program<'info, Token>,
+    pub user_lp: Box<InterfaceAccount<'info, TokenAccount>>,
+    pub token_program: Interface<'info, TokenInterface>,
     pub system_program: Program<'info, System>,
     pub associated_token_program: Program<'info, AssociatedToken>,
 }
@@ -92,37 +101,29 @@ impl<'info> Deposit<'info> {
 
         require!(x <= max_x && y <= max_y, AmmError::SlippageExceeded);
 
-        // deposit token x
         self.deposit_tokens(true, x)?;
-        // deposit token y
         self.deposit_tokens(false, y)?;
-        // mint lp tokens
         self.mint_lp_tokens(amount)
     }
 
     pub fn deposit_tokens(&self, is_x: bool, amount: u64) -> Result<()> {
-        let (from, to) = match is_x {
-            true => (
-                self.user_x.to_account_info(),
-                self.vault_x.to_account_info(),
-            ),
-            false => (
-                self.user_y.to_account_info(),
-                self.vault_y.to_account_info(),
-            ),
+        let (from, to, mint) = match is_x {
+            true => (&self.user_x, &self.vault_x, &self.mint_x),
+            false => (&self.user_y, &self.vault_y, &self.mint_y),
         };
 
         let cpi_program = self.token_program.to_account_info();
 
-        let cpi_accounts = Transfer {
-            from,
-            to,
+        let cpi_accounts = TransferChecked {
+            from: from.to_account_info(),
+            to: to.to_account_info(),
             authority: self.user.to_account_info(),
+            mint: mint.to_account_info(),
         };
 
         let ctx = CpiContext::new(cpi_program, cpi_accounts);
 
-        transfer(ctx, amount)
+        transfer_checked(ctx, amount, mint.decimals)
     }
 
     pub fn mint_lp_tokens(&self, amount: u64) -> Result<()> {
