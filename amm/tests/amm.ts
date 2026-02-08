@@ -59,7 +59,9 @@ describe("anchor-amm", () => {
       connection,
       payer,
       mint_x,
-      payer.publicKey
+      payer.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
     );
     console.log("Created payer ata for mint X ", payer_x_ata);
     mintTo(connection, payer, mint_x, payer_x_ata, payer, 100000);
@@ -69,17 +71,34 @@ describe("anchor-amm", () => {
       connection,
       payer,
       mint_y,
-      payer.publicKey
+      payer.publicKey,
+      undefined,
+      TOKEN_PROGRAM_ID
     );
     console.log("Created payer ata for mint Y ", payer_y_ata);
     mintTo(connection, payer, mint_y, payer_y_ata, payer, 100000);
     console.log("Minted 100000 mint_y to payer_y_ata");
 
-    payer_lp_ata = getAssociatedTokenAddressSync(lp_mint, payer.publicKey);
+    payer_lp_ata = getAssociatedTokenAddressSync(
+      lp_mint,
+      payer.publicKey,
+      true,
+      TOKEN_PROGRAM_ID
+    );
 
-    vault_x = getAssociatedTokenAddressSync(mint_x, config_addr, true);
+    vault_x = getAssociatedTokenAddressSync(
+      mint_x,
+      config_addr,
+      true,
+      TOKEN_PROGRAM_ID
+    );
     console.log("Vault X: ", vault_x);
-    vault_y = getAssociatedTokenAddressSync(mint_y, config_addr, true);
+    vault_y = getAssociatedTokenAddressSync(
+      mint_y,
+      config_addr,
+      true,
+      TOKEN_PROGRAM_ID
+    );
     console.log("Vault Y: ", vault_y);
   });
 
@@ -92,6 +111,7 @@ describe("anchor-amm", () => {
         initializer: payer.publicKey,
         mintX: mint_x,
         mintY: mint_y,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
     console.log("Initialized config", tx);
@@ -108,6 +128,7 @@ describe("anchor-amm", () => {
         config: config_addr,
         vaultX: vault_x,
         vaultY: vault_y,
+        tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
     console.log("Deposit complete", tx);
