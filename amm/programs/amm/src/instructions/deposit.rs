@@ -94,7 +94,7 @@ impl<'info> Deposit<'info> {
                     amount,
                     6,
                 )
-                .unwrap();
+                .map_err(AmmError::from)?;
                 (amounts.x, amounts.y)
             }
         };

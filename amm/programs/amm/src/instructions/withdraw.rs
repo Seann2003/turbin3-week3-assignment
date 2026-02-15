@@ -20,6 +20,8 @@ pub struct Withdraw<'info> {
 
     #[account(
         mut,
+        has_one = mint_x,
+        has_one = mint_y,
         seeds =[b"config", config.seed.to_le_bytes().as_ref()],
         bump = config.config_bump,
     )]
@@ -81,7 +83,9 @@ pub struct Withdraw<'info> {
 
 impl<'info> Withdraw<'info> {
     pub fn withdraw(&mut self, amount: u64, min_x: u64, min_y: u64) -> Result<()> {
+        require!(!self.config.locked, AmmError::PoolLocked);
         require!(amount != 0, AmmError::ZeroBalance);
+        require!(min_x != 0 || min_y != 0, AmmError::InvalidAmount);
         require!(amount <= self.user_lp.amount, AmmError::InsufficientBalance);
 
         let XYAmounts {
@@ -94,7 +98,7 @@ impl<'info> Withdraw<'info> {
             amount,
             6,
         )
-        .unwrap();
+        .map_err(AmmError::from)?;
 
         require!(
             min_x <= amount_x && min_y <= amount_y,

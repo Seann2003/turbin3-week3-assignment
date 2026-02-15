@@ -22,7 +22,7 @@ pub struct ThawNft<'info> {
     #[account(
         mut,
         constraint = collection.owner == &CORE_PROGRAM_ID @MPLXCoreError::InvalidCollection,
-        constraint = !collection.data_is_empty() @MPLXCoreError::NotAuthorized,
+        constraint = !collection.data_is_empty() @MPLXCoreError::CollectionNotInitialized,
    )]
     /// CHECK: checked by the core program
     pub collection: UncheckedAccount<'info>,

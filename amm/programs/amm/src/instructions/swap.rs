@@ -15,6 +15,8 @@ pub struct Swap<'info> {
     pub mint_y: Box<InterfaceAccount<'info, Mint>>,
     #[account(
         mut,
+        has_one = mint_x,
+        has_one = mint_y,
         seeds = [b"config", config.seed.to_le_bytes().as_ref()],
         bump = config.config_bump,
     )]
@@ -40,7 +42,8 @@ pub struct Swap<'info> {
     )]
     pub vault_y: Box<InterfaceAccount<'info, TokenAccount>>,
     #[account(
-        mut,
+        init_if_needed,
+        payer = user,
         associated_token::mint = mint_x,
         associated_token::authority = user,
         associated_token::token_program = token_program
@@ -61,6 +64,9 @@ pub struct Swap<'info> {
 
 impl<'info> Swap<'info> {
     pub fn swap(&mut self, is_x: bool, amount: u64, min: u64) -> Result<()> {
+        require!(!self.config.locked, AmmError::PoolLocked);
+        require!(amount != 0, AmmError::InvalidAmount);
+
         let (to_vault_amount, from_vault_amount) = match is_x {
             true => (self.vault_x.amount, self.vault_y.amount),
             false => (self.vault_y.amount, self.vault_x.amount),
@@ -73,14 +79,14 @@ impl<'info> Swap<'info> {
             self.config.fee,
             None,
         )
-        .unwrap();
+        .map_err(AmmError::from)?;
 
         let liquidity_pair = match is_x {
             true => LiquidityPair::X,
             false => LiquidityPair::Y,
         };
 
-        let swap_result = curve.swap(liquidity_pair, amount, min).unwrap();
+        let swap_result = curve.swap(liquidity_pair, amount, min).map_err(AmmError::from)?;
 
         require_neq!(swap_result.deposit, 0, AmmError::InvalidAmount);
         require_neq!(swap_result.withdraw, 0, AmmError::InvalidAmount);
